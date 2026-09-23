@@ -20,7 +20,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ---- helpers ----
 
 async function releaseExpiredHolds(client = pool) {
-  // Any hold past its expiry: seat goes back to available, hold row removed.
   await client.query(`
     UPDATE seats SET status = 'available'
     WHERE id IN (SELECT seat_id FROM holds WHERE expires_at < now())
@@ -29,7 +28,6 @@ async function releaseExpiredHolds(client = pool) {
   await client.query(`DELETE FROM holds WHERE expires_at < now()`);
 }
 
-// Background sweep every 30s, belt-and-suspenders in addition to on-demand cleanup.
 setInterval(() => releaseExpiredHolds().catch(console.error), 30 * 1000);
 
 // ---- routes ----
@@ -50,7 +48,6 @@ app.get('/api/shows/:id/seats', async (req, res) => {
   res.json(rows);
 });
 
-// Create a time-limited hold on one or more seats.
 app.post('/api/holds', async (req, res) => {
   const { showId, seatIds } = req.body;
   if (!showId || !Array.isArray(seatIds) || seatIds.length === 0) {
@@ -62,7 +59,6 @@ app.post('/api/holds', async (req, res) => {
     await client.query('BEGIN');
     await releaseExpiredHolds(client);
 
-    // Lock the rows so two people can't grab the same seat at once.
     const { rows: seats } = await client.query(
       `SELECT id, status FROM seats WHERE id = ANY($1::int[]) AND show_id=$2 FOR UPDATE`,
       [seatIds, showId]
@@ -100,51 +96,54 @@ app.post('/api/holds', async (req, res) => {
   }
 });
 
-// Start Stripe Checkout for a held set of seats.
 app.post('/api/checkout', async (req, res) => {
   const { holdToken, email, showId } = req.body;
   if (!holdToken || !email) return res.status(400).json({ error: 'holdToken and email are required' });
 
-  await releaseExpiredHolds();
+  try {
+    await releaseExpiredHolds();
 
-  const { rows: holds } = await pool.query(
-    `SELECT h.seat_id, h.expires_at, s.label, s.price_cents
-     FROM holds h JOIN seats s ON s.id = h.seat_id
-     WHERE h.hold_token=$1`,
-    [holdToken]
-  );
-  if (!holds.length) return res.status(410).json({ error: 'Hold expired or not found. Please reselect your seats.' });
+    const { rows: holds } = await pool.query(
+      `SELECT h.seat_id, h.expires_at, s.label, s.price_cents
+       FROM holds h JOIN seats s ON s.id = h.seat_id
+       WHERE h.hold_token=$1`,
+      [holdToken]
+    );
+    if (!holds.length) return res.status(410).json({ error: 'Hold expired or not found. Please reselect your seats.' });
 
-  const amountCents = holds.reduce((sum, h) => sum + h.price_cents, 0);
+    const amountCents = holds.reduce((sum, h) => sum + h.price_cents, 0);
 
-  const { rows: bookingRows } = await pool.query(
-    `INSERT INTO bookings (show_id, customer_email, status, amount_cents) VALUES ($1,$2,'pending',$3) RETURNING id`,
-    [showId, email, amountCents]
-  );
-  const bookingId = bookingRows[0].id;
+    const { rows: bookingRows } = await pool.query(
+      `INSERT INTO bookings (show_id, customer_email, status, amount_cents) VALUES ($1,$2,'pending',$3) RETURNING id`,
+      [showId, email, amountCents]
+    );
+    const bookingId = bookingRows[0].id;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    customer_email: email,
-    line_items: holds.map((h) => ({
-      price_data: {
-        currency: 'usd',
-        product_data: { name: `Seat ${h.label}` },
-        unit_amount: h.price_cents,
-      },
-      quantity: 1,
-    })),
-    metadata: { holdToken, bookingId: String(bookingId) },
-    success_url: `${BASE_URL}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${BASE_URL}/index.html`,
-    expires_at: Math.floor(new Date(holds[0].expires_at).getTime() / 1000), // Stripe session dies with the hold
-  });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer_email: email,
+      line_items: holds.map((h) => ({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: `Seat ${h.label}` },
+          unit_amount: h.price_cents,
+        },
+        quantity: 1,
+      })),
+      metadata: { holdToken, bookingId: String(bookingId) },
+      success_url: `${BASE_URL}/success.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${BASE_URL}/index.html`,
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    });
 
-  await pool.query(`UPDATE bookings SET stripe_session_id=$1 WHERE id=$2`, [session.id, bookingId]);
-  res.json({ url: session.url });
+    await pool.query(`UPDATE bookings SET stripe_session_id=$1 WHERE id=$2`, [session.id, bookingId]);
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Checkout error:', err);
+    res.status(500).json({ error: 'Could not start checkout. Please try again.' });
+  }
 });
 
-// Stripe calls this. Confirms payment -> converts hold into a real booking.
 async function handleWebhook(req, res) {
   let event;
   try {
@@ -205,6 +204,12 @@ app.get('/api/bookings/by-session/:sessionId', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM bookings WHERE stripe_session_id=$1', [req.params.sessionId]);
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
 
 app.listen(PORT, () => console.log(`Seat booking server running on ${BASE_URL}`));
