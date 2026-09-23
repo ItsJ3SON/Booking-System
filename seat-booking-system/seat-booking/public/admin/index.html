@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Bookings</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  .wrap { max-width: 900px; padding-bottom: 40px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2e38; }
+  th { color: var(--muted); font-weight: 600; }
+  .status { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+  .status.paid { background: var(--available); }
+  .status.pending { background: var(--selected); color: #0f1115; }
+  .status.failed { background: var(--booked); }
+  .checked { color: var(--available); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Bookings</h1>
+    <p class="muted" id="summary">Loading…</p>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Show</th><th>Email</th><th>Seats</th><th>Amount</th><th>Status</th><th>Checked in</th><th>When</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    async function load() {
+      const res = await fetch('/api/admin/bookings');
+      const bookings = await res.json();
+      document.getElementById('summary').textContent = `${bookings.length} bookings`;
+      document.getElementById('rows').innerHTML = bookings.map(b => `
+        <tr>
+          <td>${b.show_name}</td>
+          <td>${b.customer_email}</td>
+          <td>${b.seat_labels.join(', ') || '—'}</td>
+          <td>$${(b.amount_cents / 100).toFixed(2)}</td>
+          <td><span class="status ${b.status}">${b.status}</span></td>
+          <td>${b.checked_in_at ? `<span class="checked">✓ ${new Date(b.checked_in_at).toLocaleTimeString()}</span>` : '—'}</td>
+          <td>${new Date(b.created_at).toLocaleString()}</td>
+        </tr>
+      `).join('');
+    }
+    load();
+  </script>
+</body>
+</html>
