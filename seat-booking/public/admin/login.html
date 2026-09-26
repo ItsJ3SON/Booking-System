@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Login</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div class="wrap" style="max-width: 360px; padding-top: 80px;">
+    <h1>Admin Login</h1>
+    <form id="login-form" style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
+      <input id="username" type="text" placeholder="Username" autocomplete="username" required
+        style="padding:12px; border-radius:8px; border:1px solid #3a3f4a; background:#0f1115; color:var(--text);">
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required
+        style="padding:12px; border-radius:8px; border:1px solid #3a3f4a; background:#0f1115; color:var(--text);">
+      <button type="submit">Log In</button>
+      <p id="error-msg" class="error"></p>
+    </form>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error-msg');
+      errorEl.textContent = '';
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const redirect = new URLSearchParams(location.search).get('redirect');
+        window.location.href = redirect || '/admin/index.html';
+      } else {
+        errorEl.textContent = data.error || 'Login failed';
+      }
+    });
+  </script>
+</body>
+</html>
