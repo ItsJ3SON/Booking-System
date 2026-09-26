@@ -3,6 +3,7 @@ services:
     name: seat-booking-system
     runtime: node
     plan: free
+    rootDir: seat-booking
     buildCommand: npm install
     startCommand: npm start
     envVars:
