@@ -56,6 +56,17 @@ async function releaseExpiredHolds(client = pool) {
 // Background sweep every 30s, belt-and-suspenders in addition to on-demand cleanup.
 setInterval(() => releaseExpiredHolds().catch(console.error), 30 * 1000);
 
+// Backstop: a booking normally flips from 'pending' to 'paid'/'failed' via the
+// Stripe webhook. If that webhook is ever missed (or the session never got
+// created at all), this catches it so nothing sits as "pending" forever.
+async function failStalePendingBookings() {
+  await pool.query(`
+    UPDATE bookings SET status = 'failed'
+    WHERE status = 'pending' AND created_at < now() - interval '40 minutes'
+  `);
+}
+setInterval(() => failStalePendingBookings().catch(console.error), 5 * 60 * 1000);
+
 // Sends the confirmation email with an inline QR code, once a booking is paid.
 async function sendConfirmationEmail(bookingId) {
   const { rows } = await pool.query(
