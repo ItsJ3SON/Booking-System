@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book Your Seats</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div>
+        <h1 id="show-name">Loading show…</h1>
+        <p id="show-meta" class="muted"></p>
+      </div>
+      <a href="/admin/login.html" style="color:var(--muted); font-size:0.8rem; white-space:nowrap;">Admin</a>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot available"></i> Available</span>
+      <span><i class="dot selected"></i> Reserved by you</span>
+      <span><i class="dot held"></i> Held by someone</span>
+      <span><i class="dot booked"></i> Booked</span>
+      <span><i class="dot blocked"></i> Unavailable</span>
+    </div>
+
+    <div id="screen">STAGE</div>
+    <div id="seat-map-scale-wrap"><div id="seat-map"></div></div>
+
+    <div class="panel">
+      <div id="selection-summary">Tap a seat to reserve it — held for 10 minutes</div>
+      <div id="timer" class="hidden"></div>
+      <div id="checkout-form" class="hidden">
+        <input id="email" type="email" placeholder="you@example.com" required>
+        <button id="pay-btn">Pay & Confirm</button>
+      </div>
+      <p id="error-msg" class="error"></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
