@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Cash Booking</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  .wrap { max-width: 900px; padding-bottom: 220px; }
+  #show-select { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-family: inherit; margin-bottom: 16px; }
+  .nav-link { color: var(--muted); font-size: 0.85rem; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: var(--muted); margin-bottom: 14px; }
+  #cash-name { padding: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; width: 100%; margin-bottom: 8px; }
+  .ok { color: var(--available); font-size: 0.9rem; min-height: 1em; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h1>Cash Booking</h1>
+      <a class="nav-link" href="/admin/index.html">← Bookings</a>
+    </div>
+    <div class="note">For customers who pay cash at the door. Pick their seats and confirm once you've taken the money. <strong>No email is sent and no QR codes are made</strong> — the seats are simply marked as booked and the cash is counted in your totals.</div>
+
+    <select id="show-select"></select>
+
+    <div class="legend">
+      <span><i class="dot available"></i> Available</span>
+      <span><i class="dot selected"></i> Selected</span>
+      <span><i class="dot held"></i> Held by a customer</span>
+      <span><i class="dot booked"></i> Booked</span>
+      <span><i class="dot blocked"></i> Unavailable</span>
+    </div>
+
+    <div id="screen">STAGE</div>
+    <div id="seat-map"></div>
+
+    <div class="panel">
+      <div id="selection-summary">Tap seats to select them</div>
+      <div id="checkout-form" class="hidden">
+        <input id="cash-name" type="text" maxlength="80" placeholder="Name (optional)">
+        <button id="cash-btn">Confirm cash payment</button>
+      </div>
+      <p id="error-msg" class="error"></p>
+      <p id="ok-msg" class="ok"></p>
+    </div>
+  </div>
+
+  <script>
+    let currentShowId = null;
+    let seats = [];
+    const selected = new Set();
+    const seatMapEl = document.getElementById('seat-map');
+    const errorEl = document.getElementById('error-msg');
+    const okEl = document.getElementById('ok-msg');
+    const showSelect = document.getElementById('show-select');
+    const summaryEl = document.getElementById('selection-summary');
+    const formEl = document.getElementById('checkout-form');
+    const cashBtn = document.getElementById('cash-btn');
+    const nameEl = document.getElementById('cash-name');
+
+    async function loadShows() {
+      const shows = await fetch('/api/shows').then((r) => r.json());
+      showSelect.innerHTML = shows.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
+      currentShowId = shows[0] && shows[0].id;
+      if (currentShowId) loadSeats();
+    }
+    showSelect.addEventListener('change', () => {
+      currentShowId = showSelect.value;
+      selected.clear();
+      okEl.textContent = '';
+      loadSeats();
+    });
+
+    async function loadSeats() {
+      seats = await fetch(`/api/shows/${currentShowId}/seats`).then((r) => r.json());
+      // forget any selected seat that got taken in the meantime
+      [...selected].forEach((id) => { const s = seats.find((x) => x.id === id); if (!s || s.status !== 'available') selected.delete(id); });
+      renderSeats();
+      updateSummary();
+    }
+
+    function makeSeatButton(seat) {
+      const btn = document.createElement('button');
+      btn.className = 'seat';
+      btn.textContent = seat.seat_number;
+      btn.title = `${seat.label} — €${(seat.price_cents / 100).toFixed(2)}`;
+      if (selected.has(seat.id)) btn.classList.add('selected');
+      else if (seat.status !== 'available') btn.classList.add(seat.status);
+      if (seat.status === 'available') {
+        btn.addEventListener('click', () => {
+          okEl.textContent = '';
+          if (selected.has(seat.id)) selected.delete(seat.id); else selected.add(seat.id);
+          renderSeats();
+          updateSummary();
+        });
+      } else {
+        btn.disabled = true;
+      }
+      return btn;
+    }
+
+    function renderSeats() {
+      const rows = {};
+      seats.forEach((s) => { (rows[s.row_name] ||= []).push(s); });
+      seatMapEl.innerHTML = '';
+      Object.keys(rows).sort().forEach((rowName) => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'row';
+        const left = rows[rowName].filter((s) => s.side === 'L').sort((a, b) => a.seat_number - b.seat_number);
+        const right = rows[rowName].filter((s) => s.side === 'R').sort((a, b) => a.seat_number - b.seat_number);
+        const label = document.createElement('span');
+        label.className = 'row-label';
+        label.textContent = rowName;
+        rowEl.appendChild(label);
+        [...left].reverse().forEach((seat) => rowEl.appendChild(makeSeatButton(seat)));
+        const gap = document.createElement('div');
+        gap.className = 'aisle-gap';
+        rowEl.appendChild(gap);
+        right.forEach((seat) => rowEl.appendChild(makeSeatButton(seat)));
+        seatMapEl.appendChild(rowEl);
+      });
+    }
+
+    function updateSummary() {
+      if (!selected.size) {
+        summaryEl.textContent = 'Tap seats to select them';
+        formEl.classList.add('hidden');
+        return;
+      }
+      const chosen = seats.filter((s) => selected.has(s.id));
+      const total = chosen.reduce((n, s) => n + s.price_cents, 0);
+      summaryEl.textContent = `${chosen.map((s) => s.label).join(', ')} — collect €${(total / 100).toFixed(2)} cash`;
+      formEl.classList.remove('hidden');
+    }
+
+    cashBtn.addEventListener('click', async () => {
+      errorEl.textContent = '';
+      okEl.textContent = '';
+      const chosen = seats.filter((s) => selected.has(s.id));
+      const total = chosen.reduce((n, s) => n + s.price_cents, 0);
+      if (!confirm(`Book ${chosen.length} seat(s) for €${(total / 100).toFixed(2)} cash?\n\nNo email or QR code will be created.`)) return;
+      cashBtn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/cash-booking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showId: currentShowId, seatIds: [...selected], name: nameEl.value.trim() }),
+        });
+        if (res.status === 401) { window.location.href = '/admin/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not book those seats');
+        okEl.textContent = `Booked ${chosen.map((s) => s.label).join(', ')} — €${(total / 100).toFixed(2)} cash.`;
+        selected.clear();
+        nameEl.value = '';
+      } catch (err) {
+        errorEl.textContent = err.message;
+      } finally {
+        cashBtn.disabled = false;
+        loadSeats();
+      }
+    });
+
+    loadShows();
+  </script>
+</body>
+</html>
