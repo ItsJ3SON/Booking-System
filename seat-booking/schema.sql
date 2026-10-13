@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_seats_show ON seats(show_id);
 INSERT INTO shows (name, venue, starts_at, time_tbc)
 SELECT v.name, v.venue, v.starts_at::timestamptz, v.time_tbc
 FROM (VALUES
-  ('Is-Sibt 26 ta’ Diċembru',          'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-26 19:30:00+01', false),
+  ('Is-Sibt 26 ta’ Diċembru - 19.30', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-26 19:30:00+01', false),
   ('Il-Ħadd 27 ta’ Diċembru — 15:00', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-27 15:00:00+01', false),
   ('Il-Ħadd 27 ta’ Diċembru — 19:30', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-27 19:30:00+01', false)
 ) AS v(name, venue, starts_at, time_tbc)
