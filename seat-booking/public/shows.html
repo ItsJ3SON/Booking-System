@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Il-Mazza Rieqda | Panto 2026</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .shows { display: flex; flex-direction: column; gap: 14px; margin-top: 24px; }
+  .show-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px; text-decoration: none; color: inherit; display: block;
+  }
+  .show-card h2 { font-family: 'Fraunces', Georgia, serif; font-size: 1.2rem; margin: 0 0 4px; }
+  .show-card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Il-Mazza Rieqda | Panto 2026</h1>
+    <p class="muted">Pick which night you're booking for.</p>
+    <div class="shows" id="shows">Loading…</div>
+  </div>
+  <script>
+    async function load() {
+      const shows = await fetch('/api/shows').then(r => r.json());
+      document.getElementById('shows').innerHTML = shows.map(s => {
+        return `
+          <a class="show-card" href="/index.html?show=${s.id}">
+            <h2>${s.name}</h2>
+            <p>${s.venue}</p>
+          </a>
+        `;
+      }).join('');
+    }
+    load();
+  </script>
+</body>
+</html>
