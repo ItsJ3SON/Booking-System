@@ -68,8 +68,9 @@ CREATE INDEX IF NOT EXISTS idx_seats_show ON seats(show_id);
 -- Two real shows, times to be confirmed later
 INSERT INTO shows (name, venue, starts_at, time_tbc)
 VALUES
-  ('Show — December 26th', 'Main Theater', '2026-12-26 00:00:00+00', true),
-  ('Show — December 27th', 'Main Theater', '2026-12-27 00:00:00+00', true)
+  ('Is-Sibt 26 ta’ Diċembru', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-26 19:30:00+00', true),
+  ('Il-Ħadd 27 ta’ Diċembru', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-27 15:00:00+00', true)
+  ('Il-Ħadd 27 ta’ Diċembru', 'L-Iskola Primarja ta’ Marsaxlokk', '2026-12-27 19:30:00+00', true)
 ON CONFLICT DO NOTHING;
 
 -- 200 seats per show: 10 rows (A-J), 10 seats on each side of the aisle.
