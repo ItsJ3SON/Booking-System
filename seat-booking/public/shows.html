@@ -27,7 +27,7 @@
       document.getElementById('shows').innerHTML = shows.map(s => {
         const date = new Date(s.starts_at);
         const dateStr = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Malta' });
-        const whenStr = s.time_tbc ? `${dateStr} — Time TBC` : `${dateStr}, ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Malta' })}`;
+        const whenStr = s.time_tbc ? `${dateStr}` : `${dateStr}, ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Malta' })}`;
         return `
           <a class="show-card" href="/index.html?show=${s.id}">
             <h2>${s.name}</h2>
