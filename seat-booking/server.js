@@ -61,12 +61,14 @@ async function isValidSession(token) {
   return rows.length > 0;
 }
 
-// Occasionally sweep out old expired sessions so the table doesn't grow forever.
-setInterval(() => {
+// Sweep out old expired sessions whenever someone logs in, so the table doesn't
+// grow forever. (This used to run on an hourly timer, but background timers
+// wake the Neon database even when nobody is using the site.)
+function cleanupExpiredSessions() {
   pool.query(`DELETE FROM admin_sessions WHERE expires_at <= now()`).catch((err) =>
     console.error('Session cleanup error:', err)
   );
-}, 60 * 60 * 1000);
+}
 
 async function requireAdmin(req, res, next) {
   // Allow the login page and login/logout API through without a session.
@@ -96,6 +98,7 @@ app.post('/api/admin/login', async (req, res) => {
   if (username === expectedUser && password === expectedPass) {
     try {
       await createAdminSession(res);
+      cleanupExpiredSessions();
       return res.json({ ok: true });
     } catch (err) {
       console.error('Login session create error:', err);
@@ -131,8 +134,10 @@ async function releaseExpiredHolds(client = pool) {
   await client.query(`DELETE FROM holds WHERE expires_at < now()`);
 }
 
-// Background sweep every 30s, belt-and-suspenders in addition to on-demand cleanup.
-setInterval(() => releaseExpiredHolds().catch(console.error), 30 * 1000);
+// No background timer here on purpose: every route that reads or changes seats
+// (seat map, add hold, checkout, cash booking) calls releaseExpiredHolds() first,
+// so expired holds are always cleared before anyone sees them. A timer that ran
+// every 30s kept the Neon database awake 24/7 and burned the free compute quota.
 
 // Backstop: a booking normally flips from 'pending' to 'paid'/'failed' via the
 // Stripe webhook. If that webhook is ever missed (or the session never got
@@ -143,7 +148,8 @@ async function failStalePendingBookings() {
     WHERE status = 'pending' AND created_at < now() - interval '40 minutes'
   `);
 }
-setInterval(() => failStalePendingBookings().catch(console.error), 5 * 60 * 1000);
+// Run on demand (checkout + admin bookings list) instead of on a timer, so the
+// database can sleep when the site is idle.
 
 // Sends the confirmation email (one QR code per ticket) once a booking is paid.
 function escapeHtml(str) {
@@ -350,6 +356,7 @@ app.post('/api/checkout', async (req, res) => {
 
   try {
     await releaseExpiredHolds();
+    failStalePendingBookings().catch(console.error);
 
     const { rows: holds } = await pool.query(
       `SELECT h.seat_id, h.expires_at, s.label, s.price_cents
@@ -568,6 +575,7 @@ app.post('/api/admin/cash-booking', async (req, res) => {
 
 app.get('/api/admin/bookings', async (req, res) => {
   try {
+    await failStalePendingBookings();
     const { rows } = await pool.query(`
       SELECT b.id, b.show_id, b.customer_email, b.payment_method, b.status, b.amount_cents, b.created_at, sh.name AS show_name,
              COALESCE((
