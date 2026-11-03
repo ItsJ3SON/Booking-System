@@ -261,4 +261,19 @@ syncPanelSpace();
 
 loadShow();
 loadSeats();
-setInterval(() => { if (heldSeatIds.size === 0) loadSeats(); }, 5000); // keep seat map fresh while browsing
+// Keep the seat map fresh while browsing — but only while the tab is actually
+// visible and someone has interacted recently. A forgotten open tab used to poll
+// the server every 5s forever, which kept the server and database awake 24/7.
+const IDLE_STOP_MS = 10 * 60 * 1000;
+let lastActivity = Date.now();
+['click', 'touchstart', 'keydown', 'scroll', 'mousemove'].forEach((evt) =>
+  window.addEventListener(evt, () => { lastActivity = Date.now(); }, { passive: true })
+);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { lastActivity = Date.now(); if (heldSeatIds.size === 0) loadSeats(); }
+});
+setInterval(() => {
+  if (document.hidden) return;
+  if (Date.now() - lastActivity > IDLE_STOP_MS) return;
+  if (heldSeatIds.size === 0) loadSeats();
+}, 5000);
